@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2025 Reza Jelveh
  * Copyright (c) 2020 rxi
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,6 +24,7 @@
 #include "log.h"
 
 #define MAX_CALLBACKS 32
+#define SYS_WRITE 0x05
 
 typedef struct {
   log_LogFn fn;
@@ -43,41 +45,82 @@ static const char *level_strings[] = {
   "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
 };
 
-#ifdef LOG_USE_COLOR
-static const char *level_colors[] = {
-  "\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"
-};
-#endif
-
-
-static void stdout_callback(log_Event *ev) {
-  char buf[16];
-  buf[strftime(buf, sizeof(buf), "%H:%M:%S", ev->time)] = '\0';
-#ifdef LOG_USE_COLOR
-  fprintf(
-    ev->udata, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
-    buf, level_colors[ev->level], level_strings[ev->level],
-    ev->file, ev->line);
-#else
-  fprintf(
-    ev->udata, "%s %-5s %s:%d: ",
-    buf, level_strings[ev->level], ev->file, ev->line);
-#endif
-  vfprintf(ev->udata, ev->fmt, ev->ap);
-  fprintf(ev->udata, "\n");
-  fflush(ev->udata);
+static int __semihost(int op, void* arg) {
+  int result;
+  #ifdef __thumb__
+  __asm volatile (
+    "mov r0, %1\n"
+    "mov r1, %2\n"
+    "bkpt 0xAB\n"
+    "mov %0, r0"
+    : "=r" (result)
+    : "r" (op), "r" (arg)
+    : "r0", "r1", "memory"
+  );
+  #else
+  __asm volatile (
+    "mov r0, %1\n"
+    "mov r1, %2\n"
+    "svc 0x123456\n"
+    "mov %0, r0"
+    : "=r" (result)
+    : "r" (op), "r" (arg)
+    : "r0", "r1", "memory"
+  );
+  #endif
+  return result;
 }
 
+static void semihosting_write(const char* buf, int length) {
+  struct {
+    int fd;
+    const void* buf;
+    int length;
+  } args;
 
-static void file_callback(log_Event *ev) {
-  char buf[64];
-  buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
-  fprintf(
-    ev->udata, "%s %-5s %s:%d: ",
-    buf, level_strings[ev->level], ev->file, ev->line);
-  vfprintf(ev->udata, ev->fmt, ev->ap);
-  fprintf(ev->udata, "\n");
-  fflush(ev->udata);
+  args.fd = 1;
+  args.buf = buf;
+  args.length = length;
+  __semihost(SYS_WRITE, &args);
+}
+
+static void stdout_callback(log_Event *ev) {
+  char buf[512];
+  int pos = 0;
+
+  pos += strftime(buf + pos, sizeof(buf) - pos, "%H:%M:%S", ev->time);
+  if (pos < sizeof(buf) - 1) buf[pos++] = ' ';
+
+  const char* level_str = level_strings[ev->level];
+  while (*level_str && pos < sizeof(buf) - 1) {
+    buf[pos++] = *level_str++;
+  }
+  if (pos < sizeof(buf) - 1) buf[pos++] = ' ';
+
+  const char* file = ev->file;
+  while (*file && pos < sizeof(buf) - 1) {
+    buf[pos++] = *file++;
+  }
+  if (pos < sizeof(buf) - 1) buf[pos++] = ':';
+
+  pos += snprintf(buf + pos, sizeof(buf) - pos, "%d", ev->line);
+  if (pos < sizeof(buf) - 1) buf[pos++] = ':';
+  if (pos < sizeof(buf) - 1) buf[pos++] = ' ';
+
+  if (pos < sizeof(buf)) {
+    int remaining = sizeof(buf) - pos;
+    int msg_len = vsnprintf(buf + pos, remaining, ev->fmt, ev->ap);
+    if (msg_len >= 0) {
+      pos += (msg_len < remaining) ? msg_len : (remaining - 1);
+    }
+  }
+
+  if (pos >= sizeof(buf) - 1) {
+    pos = sizeof(buf) - 2;
+  }
+  buf[pos++] = '\n';
+
+  semihosting_write(buf, pos);
 }
 
 
@@ -123,9 +166,6 @@ int log_add_callback(log_LogFn fn, void *udata, int level) {
 }
 
 
-int log_add_fp(FILE *fp, int level) {
-  return log_add_callback(file_callback, fp, level);
-}
 
 
 static void init_event(log_Event *ev, void *udata) {
@@ -148,7 +188,7 @@ void log_log(int level, const char *file, int line, const char *fmt, ...) {
   lock();
 
   if (!L.quiet && level >= L.level) {
-    init_event(&ev, stderr);
+    init_event(&ev, NULL);
     va_start(ev.ap, fmt);
     stdout_callback(&ev);
     va_end(ev.ap);

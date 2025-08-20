@@ -1,4 +1,5 @@
 /**
+ * Copyright (c) 2025 Reza Jelveh
  * Copyright (c) 2020 rxi
  *
  * This library is free software; you can redistribute it and/or modify it
@@ -42,7 +43,6 @@ void log_set_lock(log_LockFn fn, void *udata);
 void log_set_level(int level);
 void log_set_quiet(bool enable);
 int log_add_callback(log_LogFn fn, void *udata, int level);
-int log_add_fp(FILE *fp, int level);
 
 void log_log(int level, const char *file, int line, const char *fmt, ...);
 
