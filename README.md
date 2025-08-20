@@ -9,6 +9,14 @@ A simple logging library implemented in C99
 into an existing project and compiled along with it. The library provides 6
 function-like macros for logging:
 
+### Semihosting Support
+When using this library on embedded ARM targets, semihosting is supported for output.
+To enable semihosting in OpenOCD, add the following to your configuration:
+```
+arm semihosting enable
+```
+This allows log messages to be displayed through the debugger when running on hardware.
+
 ```c
 log_trace(const char *fmt, ...);
 log_debug(const char *fmt, ...);
@@ -43,10 +51,6 @@ All logs below the given level will not be written to `stderr`. By default the
 level is `LOG_TRACE`, such that nothing is ignored.
 
 
-#### log_add_fp(FILE *fp, int level)
-One or more file pointers where the log will be written can be provided to the
-library by using the `log_add_fp()` function. The data written to the file
-output is of the following format:
 
 ```
 2047-03-11 20:18:26 TRACE src/main.c:11: Hello world
@@ -54,13 +58,6 @@ output is of the following format:
 
 Any messages below the given `level` are ignored. If the library failed to add a
 file pointer a value less-than-zero is returned.
-
-
-#### log_add_callback(log_LogFn fn, void *udata, int level)
-One or more callback functions which are called with the log data can be
-provided to the library by using the `log_add_callback()` function. A callback
-function is passed a `log_Event` structure containing the `line` number,
-`filename`, `fmt` string, `va` printf va\_list, `level` and the given `udata`.
 
 
 #### log_set_lock(log_LockFn fn, void *udata)
@@ -72,10 +69,6 @@ The function is passed the boolean `true` if the lock should be acquired or
 #### const char* log_level_string(int level)
 Returns the name of the given log level as a string.
 
-
-#### LOG_USE_COLOR
-If the library is compiled with `-DLOG_USE_COLOR` ANSI color escape codes will
-be used when printing.
 
 
 ## License
