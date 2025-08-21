@@ -85,7 +85,7 @@ static void semihosting_write(const char* buf, int length) {
 }
 
 static void stdout_callback(log_Event *ev) {
-  char buf[512];
+  static char buf[LOG_BUFFER_SIZE];
   int pos = 0;
 
   pos += strftime(buf + pos, sizeof(buf) - pos, "%H:%M:%S", ev->time);
@@ -164,8 +164,6 @@ int log_add_callback(log_LogFn fn, void *udata, int level) {
   }
   return -1;
 }
-
-
 
 
 static void init_event(log_Event *ev, void *udata) {

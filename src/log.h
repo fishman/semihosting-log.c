@@ -16,6 +16,10 @@
 
 #define LOG_VERSION "0.1.0"
 
+#ifndef LOG_BUFFER_SIZE
+#define LOG_BUFFER_SIZE 512
+#endif
+
 typedef struct {
   va_list ap;
   const char *fmt;
@@ -28,6 +32,7 @@ typedef struct {
 
 typedef void (*log_LogFn)(log_Event *ev);
 typedef void (*log_LockFn)(bool lock, void *udata);
+typedef void (*log_WriteFn)(const char *buf, int length);
 
 enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
 
